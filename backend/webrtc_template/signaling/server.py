@@ -18,8 +18,12 @@ ADR:
 - JSON gate before WSR_DECODER.decode: lstrip().startswith("{") rejects non-object payloads
   in O(1) before msgspec allocates memory for a full parse. Tolerates leading whitespace.
 - WSCloseCode choices: INVALID_TEXT (1007) for protocol violations, POLICY_VIOLATION (1008)
-  for rate limit, GOING_AWAY (1001) for server shutdown — each signals a distinct cause
-  to the client reconnect logic.
+  for rate limit and duplicate peer_id, GOING_AWAY (1001) for server shutdown — each signals
+  a distinct cause to the client reconnect logic.
+- TOCTOU fix via Room._lock + try_add_peer: ws.prepare() yields to event loop, so the
+  check-then-add must be atomic. ws.prepare() runs first (before lock) because it is I/O;
+  duplicate is closed with POLICY_VIOLATION (1008) after the handshake instead of HTTP 409,
+  which is the only valid rejection point once prepare() has completed.
 - heartbeat=30 + max_msg_size=64KB on WebSocketResponse: layer-1 flood protection;
   heartbeat detects dead peers, max_msg_size rejects oversized payloads before decode.
 - on_shutdown hook calls manager.shutdown(): closes all WebSocket connections with
@@ -59,10 +63,8 @@ async def _setup_peer(
     room_id: str,
     peer_id: str,
     mode: str,
+    existing_peers: list[str],
 ) -> None:
-    # snapshot before add — room-info.peers must list who was there before the joiner, not include them
-    existing_peers = room.peer_ids
-    room.add_peer(peer_id, ws)
     await ws.send_bytes(msgspec.json.encode({
         "type": "room-info",
         "room": room_id,
@@ -71,8 +73,6 @@ async def _setup_peer(
         "your_id": peer_id,
     }))
     await room.broadcast({"type": "peer-joined", "peer_id": peer_id}, exclude_id=peer_id)
-
-
 
 
 async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> None:
@@ -133,13 +133,15 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
     room = manager.get_or_create(room_id, mode)
 
-    if room.get_ws(peer_id):
-        raise web.HTTPConflict(reason="peer_id already connected in this room")
-
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
     await ws.prepare(request)
 
-    await _setup_peer(ws, room, room_id, peer_id, mode)
+    existing_peers = await room.try_add_peer(peer_id, ws)
+    if existing_peers is None:
+        await ws.close(code=WSCloseCode.POLICY_VIOLATION)
+        return ws
+
+    await _setup_peer(ws, room, room_id, peer_id, mode, existing_peers)
     try:
         await _message_loop(ws, room, peer_id)
     finally:

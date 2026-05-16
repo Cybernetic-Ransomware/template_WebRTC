@@ -1,3 +1,5 @@
+import asyncio
+
 import msgspec.json
 from aiohttp import WSCloseCode
 from aiohttp.web import WebSocketResponse
@@ -8,6 +10,7 @@ class Room:
         self.room_id = room_id
         self.mode = mode
         self._peers: dict[str, WebSocketResponse] = {}
+        self._lock = asyncio.Lock()
 
     @property
     def peer_ids(self) -> list[str]:
@@ -17,8 +20,14 @@ class Room:
     def size(self) -> int:
         return len(self._peers)
 
-    def add_peer(self, peer_id: str, ws: WebSocketResponse) -> None:
-        self._peers[peer_id] = ws
+    async def try_add_peer(self, peer_id: str, ws: WebSocketResponse) -> list[str] | None:
+        """Atomically check+add. Returns snapshot of existing peers on success, None on collision."""
+        async with self._lock:
+            if peer_id in self._peers:
+                return None
+            existing = list(self._peers.keys())
+            self._peers[peer_id] = ws
+            return existing
 
     def remove_peer(self, peer_id: str) -> None:
         self._peers.pop(peer_id, None)
