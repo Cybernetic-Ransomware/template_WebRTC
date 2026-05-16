@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "aiohttp-cors>=0.7",
     "msgspec>=0.21.1",
+    "structlog>=25.5.0",
 ]
 
 [project.scripts]

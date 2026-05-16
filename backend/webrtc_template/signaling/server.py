@@ -22,8 +22,8 @@ ADR:
   a distinct cause to the client reconnect logic.
 - Handler exceptions caught in _message_loop: bare propagation disconnects the peer silently —
   teardown still runs (try/finally in ws_handler) but the root cause is lost. Caught with
-  logger.exception (includes traceback) + close(INTERNAL_ERROR / 1011). BLE001 broad-except
-  is intentional: mode handlers (especially SFU/aiortc) can throw unpredictably.
+  log.error(exc_info=True) + close(INTERNAL_ERROR / 1011). BLE001 broad-except is intentional:
+  mode handlers (especially SFU/aiortc) can throw unpredictably.
 - TOCTOU fix via Room._lock + try_add_peer: ws.prepare() yields to event loop, so the
   check-then-add must be atomic. ws.prepare() runs first (before lock) because it is I/O;
   duplicate is closed with POLICY_VIOLATION (1008) after the handshake instead of HTTP 409,
@@ -34,9 +34,11 @@ ADR:
   GOING_AWAY before the process exits, preventing reconnect storms on SIGTERM.
 - CORS origins from config.cors_origins: "*" in dev, explicit whitelist in prod.
   allow_credentials=True requires a non-wildcard origin to function in browsers.
+- structlog.contextvars bound in ws_handler (peer_id, room_id, mode): each aiohttp request
+  runs in its own asyncio Task, so contextvars are isolated per connection. All downstream
+  log calls carry the same context without threading it through function signatures.
 """
-import logging
-
+import structlog
 import aiohttp_cors
 import msgspec
 from aiohttp import WSCloseCode, WSMsgType, web
@@ -52,8 +54,7 @@ from webrtc_template.signaling.room import Room
 # Acceptable for signaling: ICE negotiation bursts are short-lived and self-limiting.
 _MSG_RATE_LIMIT = 50
 
-
-logger = logging.getLogger(__name__)
+log = structlog.get_logger()
 
 
 async def ice_servers_handler(request: web.Request) -> web.Response:
@@ -90,12 +91,12 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
 
         message_counter += 1
         if message_counter > _MSG_RATE_LIMIT:
-            logger.warning("peer=%s rate limit exceeded (%d msg/s)", peer_id, _MSG_RATE_LIMIT)
+            log.warning("rate_limit_exceeded", limit=_MSG_RATE_LIMIT)
             await ws.close(code=WSCloseCode.POLICY_VIOLATION)
             break
 
         if msg.type == WSMsgType.BINARY:
-            logger.warning("peer=%s sent binary frame on text-only protocol", peer_id)
+            log.warning("binary_frame_rejected")
             await ws.close(code=WSCloseCode.UNSUPPORTED_DATA)
             break
         if msg.type != WSMsgType.TEXT:
@@ -103,19 +104,19 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
 
         # TODO: queue bound — asyncio.Semaphore or receive_timeout to cap buffered messages
         if not msg.data.lstrip().startswith("{"):
-            logger.warning("peer=%s invalid frame (not JSON object): %.40r", peer_id, msg.data)
+            log.warning("invalid_frame_not_json_object", preview=msg.data[:40])
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
         try:
             message = WSR_DECODER.decode(msg.data)
         except msgspec.ValidationError as exc:
-            logger.warning("peer=%s protocol violation: %s", peer_id, exc)
+            log.warning("protocol_violation", error=str(exc))
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
         try:
             await handler(room, peer_id, message)
         except Exception:
-            logger.exception("peer=%s handler error", peer_id)
+            log.error("handler_error", exc_info=True)
             await ws.close(code=WSCloseCode.INTERNAL_ERROR)
             break
 
@@ -125,7 +126,7 @@ async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
     try:
         await room.broadcast({"type": "peer-left", "peer_id": peer_id})
     except Exception:
-        logger.exception("peer=%s broadcast peer-left failed", peer_id)
+        log.error("broadcast_peer_left_failed", exc_info=True)
     finally:
         manager.cleanup_empty(room_id)
 
@@ -142,11 +143,19 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
     room = manager.get_or_create(room_id, mode)
 
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        peer_id=peer_id,
+        room_id=room.room_id,
+        mode=room.mode,
+    )
+
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
     await ws.prepare(request)
 
     existing_peers = await room.try_add_peer(peer_id, ws)
     if existing_peers is None:
+        log.warning("peer_id_collision")
         await ws.close(code=WSCloseCode.POLICY_VIOLATION)
         return ws
 
