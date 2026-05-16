@@ -64,15 +64,13 @@ async def ice_servers_handler(request: web.Request) -> web.Response:
 async def _setup_peer(
     ws: web.WebSocketResponse,
     room: Room,
-    room_id: str,
     peer_id: str,
-    mode: str,
     existing_peers: list[str],
 ) -> None:
     await ws.send_bytes(msgspec.json.encode({
         "type": "room-info",
-        "room": room_id,
-        "mode": mode,
+        "room": room.room_id,
+        "mode": room.mode,
         "peers": existing_peers,
         "your_id": peer_id,
     }))
@@ -150,7 +148,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
         await ws.close(code=WSCloseCode.POLICY_VIOLATION)
         return ws
 
-    await _setup_peer(ws, room, room_id, peer_id, mode, existing_peers)
+    await _setup_peer(ws, room, peer_id, existing_peers)
     try:
         await _message_loop(ws, room, peer_id)
     finally:
