@@ -12,6 +12,9 @@ ADR:
 - Fixed window rate limiter (_MSG_RATE_LIMIT=50): allows up to 2× burst at window boundary.
   Acceptable for signaling — ICE negotiation bursts are short-lived and self-limiting.
   Token bucket would eliminate burst but adds complexity not justified here.
+- Non-TEXT frames break the loop: BINARY closes with UNSUPPORTED_DATA (1003) — explicit
+  protocol violation; CLOSE/ERROR break silently — aiohttp handles the handshake. Using
+  continue would let clients hold the loop alive with binary spam indefinitely.
 - JSON gate before WSR_DECODER.decode: lstrip().startswith("{") rejects non-object payloads
   in O(1) before msgspec allocates memory for a full parse. Tolerates leading whitespace.
 - WSCloseCode choices: INVALID_TEXT (1007) for protocol violations, POLICY_VIOLATION (1008)
@@ -88,8 +91,12 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
             await ws.close(code=WSCloseCode.POLICY_VIOLATION)
             break
 
+        if msg.type == WSMsgType.BINARY:
+            logger.warning("peer=%s sent binary frame on text-only protocol", peer_id)
+            await ws.close(code=WSCloseCode.UNSUPPORTED_DATA)
+            break
         if msg.type != WSMsgType.TEXT:
-            continue
+            break
 
         # TODO: queue bound — asyncio.Semaphore or receive_timeout to cap buffered messages
         if not msg.data.lstrip().startswith("{"):
