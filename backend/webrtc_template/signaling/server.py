@@ -12,8 +12,6 @@ from webrtc_template.signaling.manager import manager
 from webrtc_template.signaling.messages import WSR_DECODER
 from webrtc_template.signaling.room import Room
 
-ALLOWED_MODES: frozenset[str] = frozenset(MODE_HANDLERS)
-
 _MSG_RATE_LIMIT = 50  # max messages per second per peer
 
 
@@ -92,8 +90,8 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
     if not room_id or not peer_id:
         raise web.HTTPBadRequest(reason="room and peer_id are required")
-    if mode not in ALLOWED_MODES:
-        raise web.HTTPBadRequest(reason=f"mode must be one of {sorted(ALLOWED_MODES)}")
+    if mode not in MODE_HANDLERS:
+        raise web.HTTPBadRequest(reason=f"mode must be one of {sorted(MODE_HANDLERS)}")
 
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
     await ws.prepare(request)
