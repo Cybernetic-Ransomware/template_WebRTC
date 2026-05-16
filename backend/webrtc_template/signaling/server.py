@@ -58,6 +58,7 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
 
         message_counter += 1
         if message_counter >= _MSG_RATE_LIMIT:
+            logger.warning("peer=%s rate limit exceeded (%d msg/s)", peer_id, _MSG_RATE_LIMIT)
             await ws.close(code=WSCloseCode.POLICY_VIOLATION)
             break
 
@@ -66,11 +67,13 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
 
         # TODO: queue bound — asyncio.Semaphore or receive_timeout to cap buffered messages
         if not msg.data or msg.data[0] != ord('{'):
+            logger.warning("peer=%s invalid frame (not JSON object): %.40r", peer_id, msg.data)
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
         try:
             message = WSR_DECODER.decode(msg.data)
-        except msgspec.ValidationError:
+        except msgspec.ValidationError as exc:
+            logger.warning("peer=%s protocol violation: %s", peer_id, exc)
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
         await MODE_HANDLERS[room.mode](room, peer_id, message)
