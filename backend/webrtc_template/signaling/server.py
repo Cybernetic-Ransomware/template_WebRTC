@@ -64,7 +64,7 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
             continue
 
         # TODO: queue bound — asyncio.Semaphore or receive_timeout to cap buffered messages
-        if not msg.data or msg.data[0] != ord('{'):
+        if not msg.data.lstrip().startswith("{"):
             logger.warning("peer=%s invalid frame (not JSON object): %.40r", peer_id, msg.data)
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
