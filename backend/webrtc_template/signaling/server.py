@@ -4,6 +4,7 @@ import logging
 import aiohttp_cors
 import msgspec
 from aiohttp import WSCloseCode, WSMsgType, web
+from time import monotonic
 
 from webrtc_template.config import config
 from webrtc_template.modes import MODE_HANDLERS
@@ -12,6 +13,9 @@ from webrtc_template.signaling.messages import WSR_DECODER
 from webrtc_template.signaling.room import Room
 
 ALLOWED_MODES: frozenset[str] = frozenset(MODE_HANDLERS)
+
+_MSG_RATE_LIMIT = 50  # max messages per second per peer
+
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +44,36 @@ async def _setup_peer(
     await room.broadcast({"type": "peer-joined", "peer_id": peer_id}, exclude_id=peer_id)
 
 
+
+
 async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> None:
+    window_start = monotonic()
+    message_counter = 0
+
     async for msg in ws:
-        match msg.type:
-            case WSMsgType.TEXT:
-                try:
-                    message = WSR_DECODER.decode(msg.data)
-                except msgspec.ValidationError:
-                    await ws.close(code=WSCloseCode.INVALID_TEXT)
-                    break
-                await MODE_HANDLERS[room.mode](room, peer_id, message)
-            case WSMsgType.ERROR | WSMsgType.BINARY | WSMsgType.CLOSE:
-                break
+        now = monotonic()
+        if now - window_start > 1:
+            window_start = now
+            message_counter = 0
+
+        message_counter += 1
+        if message_counter >= _MSG_RATE_LIMIT:
+            await ws.close(code=WSCloseCode.POLICY_VIOLATION)
+            break
+
+        if msg.type != WSMsgType.TEXT:
+            continue
+
+        # TODO: queue bound — asyncio.Semaphore or receive_timeout to cap buffered messages
+        if not msg.data or msg.data[0] != ord('{'):
+            await ws.close(code=WSCloseCode.INVALID_TEXT)
+            break
+        try:
+            message = WSR_DECODER.decode(msg.data)
+        except msgspec.ValidationError:
+            await ws.close(code=WSCloseCode.INVALID_TEXT)
+            break
+        await MODE_HANDLERS[room.mode](room, peer_id, message)
 
 
 async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
@@ -70,7 +92,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     if mode not in ALLOWED_MODES:
         raise web.HTTPBadRequest(reason=f"mode must be one of {sorted(ALLOWED_MODES)}")
 
-    ws = web.WebSocketResponse()
+    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
     await ws.prepare(request)
 
     room = manager.get_or_create(room_id, mode)
