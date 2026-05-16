@@ -115,8 +115,10 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
 
 async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
     room.remove_peer(peer_id)
-    await room.broadcast({"type": "peer-left", "peer_id": peer_id})
-    manager.cleanup_empty(room_id)
+    try:
+        await room.broadcast({"type": "peer-left", "peer_id": peer_id})
+    finally:
+        manager.cleanup_empty(room_id)
 
 
 async def ws_handler(request: web.Request) -> web.WebSocketResponse:
