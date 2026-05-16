@@ -55,7 +55,7 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
             message_counter = 0
 
         message_counter += 1
-        if message_counter >= _MSG_RATE_LIMIT:
+        if message_counter > _MSG_RATE_LIMIT:
             logger.warning("peer=%s rate limit exceeded (%d msg/s)", peer_id, _MSG_RATE_LIMIT)
             await ws.close(code=WSCloseCode.POLICY_VIOLATION)
             break
