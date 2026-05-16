@@ -27,7 +27,7 @@ class Room:
         return self._peers.get(peer_id)
 
     async def broadcast(self, message: dict, exclude_id: str | None = None) -> None:
-        payload = msgspec.json.encode(message).decode()
+        payload = msgspec.json.encode(message)
         for pid, ws in list(self._peers.items()):
             if pid != exclude_id and not ws.closed:
                 await ws.send_str(payload)
@@ -35,7 +35,7 @@ class Room:
     async def relay(self, to_peer_id: str, message: dict) -> None:
         ws = self._peers.get(to_peer_id)
         if ws and not ws.closed:
-            await ws.send_str(msgspec.json.encode(message).decode())
+            await ws.send_bytes(msgspec.json.encode(message))
 
     async def close_all(self) -> None:
         for ws in list(self._peers.values()):

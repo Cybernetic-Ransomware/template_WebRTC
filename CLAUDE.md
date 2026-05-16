@@ -77,6 +77,7 @@ docs/                      # Architecture Decision Records
 - `ALLOWED_MODES = frozenset(MODE_HANDLERS)` — single source of truth, derived from the dispatch table
 - `ValidationError` from msgspec → `ws.close(code=WSCloseCode.INVALID_TEXT)` (RFC 6455 code 1007) + break
 - `try/finally` in `ws_handler` guarantees peer cleanup regardless of how the loop exits
+- All server→client messages are sent as **BINARY frames** (`send_bytes` + `msgspec.json.encode`) — frontend must decode `ArrayBuffer` to JSON, not expect plain strings
 
 ### General
 - No comments unless the WHY is non-obvious

@@ -32,13 +32,13 @@ async def _setup_peer(
     # snapshot before add — room-info.peers must list who was there before the joiner, not include them
     existing_peers = room.peer_ids
     room.add_peer(peer_id, ws)
-    await ws.send_str(msgspec.json.encode({
+    await ws.send_bytes(msgspec.json.encode({
         "type": "room-info",
         "room": room_id,
         "mode": mode,
         "peers": existing_peers,
         "your_id": peer_id,
-    }).decode())
+    }))
     await room.broadcast({"type": "peer-joined", "peer_id": peer_id}, exclude_id=peer_id)
 
 
