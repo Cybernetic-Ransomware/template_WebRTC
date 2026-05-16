@@ -76,6 +76,7 @@ async def _setup_peer(
 
 
 async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> None:
+    handler = MODE_HANDLERS[room.mode]
     window_start = monotonic()
     message_counter = 0
 
@@ -109,7 +110,7 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
             logger.warning("peer=%s protocol violation: %s", peer_id, exc)
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
-        await MODE_HANDLERS[room.mode](room, peer_id, message)
+        await handler(room, peer_id, message)
 
 
 async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
