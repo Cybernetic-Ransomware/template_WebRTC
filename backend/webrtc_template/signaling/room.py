@@ -1,4 +1,4 @@
-import json
+import msgspec.json
 from aiohttp.web import WebSocketResponse
 
 
@@ -26,7 +26,7 @@ class Room:
         return self._peers.get(peer_id)
 
     async def broadcast(self, message: dict, exclude_id: str | None = None) -> None:
-        payload = json.dumps(message)
+        payload = msgspec.json.encode(message).decode()
         for pid, ws in list(self._peers.items()):
             if pid != exclude_id and not ws.closed:
                 await ws.send_str(payload)
@@ -34,4 +34,4 @@ class Room:
     async def relay(self, to_peer_id: str, message: dict) -> None:
         ws = self._peers.get(to_peer_id)
         if ws and not ws.closed:
-            await ws.send_str(json.dumps(message))
+            await ws.send_str(msgspec.json.encode(message).decode())
