@@ -1,3 +1,29 @@
+"""
+WebSocket signaling server.
+
+ADR:
+- ws_handler split into _setup_peer / _message_loop / _teardown_peer: each function owns
+  exactly one responsibility; try/finally stays in ws_handler because it owns the peer's
+  room membership, not the loop or teardown functions.
+- MODE_HANDLERS used directly for mode validation: ALLOWED_MODES frozenset was a redundant
+  alias — dict lookup is O(1) and sorted(MODE_HANDLERS) produces the same error message.
+- send_bytes + msgspec.json.encode: avoids dict→bytes→str→bytes round-trip. Clients receive
+  BINARY frames and must decode ArrayBuffer to JSON (not plain string).
+- Fixed window rate limiter (_MSG_RATE_LIMIT=50): allows up to 2× burst at window boundary.
+  Acceptable for signaling — ICE negotiation bursts are short-lived and self-limiting.
+  Token bucket would eliminate burst but adds complexity not justified here.
+- JSON gate before WSR_DECODER.decode: lstrip().startswith("{") rejects non-object payloads
+  in O(1) before msgspec allocates memory for a full parse. Tolerates leading whitespace.
+- WSCloseCode choices: INVALID_TEXT (1007) for protocol violations, POLICY_VIOLATION (1008)
+  for rate limit, GOING_AWAY (1001) for server shutdown — each signals a distinct cause
+  to the client reconnect logic.
+- heartbeat=30 + max_msg_size=64KB on WebSocketResponse: layer-1 flood protection;
+  heartbeat detects dead peers, max_msg_size rejects oversized payloads before decode.
+- on_shutdown hook calls manager.shutdown(): closes all WebSocket connections with
+  GOING_AWAY before the process exits, preventing reconnect storms on SIGTERM.
+- CORS origins from config.cors_origins: "*" in dev, explicit whitelist in prod.
+  allow_credentials=True requires a non-wildcard origin to function in browsers.
+"""
 import logging
 
 import aiohttp_cors
@@ -11,7 +37,9 @@ from webrtc_template.signaling.manager import manager
 from webrtc_template.signaling.messages import WSR_DECODER
 from webrtc_template.signaling.room import Room
 
-_MSG_RATE_LIMIT = 50  # max messages per second per peer
+# Fixed window rate limit — allows up to 2× burst at window boundary (50 msg at t=0.99s + 50 at t=1.01s).
+# Acceptable for signaling: ICE negotiation bursts are short-lived and self-limiting.
+_MSG_RATE_LIMIT = 50
 
 
 logger = logging.getLogger(__name__)
