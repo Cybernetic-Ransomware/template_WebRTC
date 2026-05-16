@@ -1,4 +1,5 @@
 import msgspec.json
+from aiohttp import WSCloseCode
 from aiohttp.web import WebSocketResponse
 
 
@@ -35,3 +36,8 @@ class Room:
         ws = self._peers.get(to_peer_id)
         if ws and not ws.closed:
             await ws.send_str(msgspec.json.encode(message).decode())
+
+    async def close_all(self) -> None:
+        for ws in list(self._peers.values()):
+            if not ws.closed:
+                await ws.close(code=WSCloseCode.GOING_AWAY)

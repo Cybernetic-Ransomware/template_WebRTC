@@ -21,5 +21,9 @@ class RoomManager:
     def room_count(self) -> int:
         return len(self._rooms)
 
+    async def shutdown(self) -> None:
+        for room in list(self._rooms.values()):
+            await room.close_all()
+
 
 manager = RoomManager()

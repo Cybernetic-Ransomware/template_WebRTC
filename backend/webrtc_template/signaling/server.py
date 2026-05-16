@@ -106,8 +106,13 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+async def _on_shutdown(app: web.Application) -> None:
+    await manager.shutdown()
+
+
 def create_app() -> web.Application:
     app = web.Application()
+    app.on_shutdown.append(_on_shutdown)
     resource_options = aiohttp_cors.ResourceOptions(
         allow_credentials=True,
         expose_headers="*",
