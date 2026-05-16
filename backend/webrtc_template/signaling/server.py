@@ -129,10 +129,14 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     if mode not in MODE_HANDLERS:
         raise web.HTTPBadRequest(reason=f"mode must be one of {sorted(MODE_HANDLERS)}")
 
+    room = manager.get_or_create(room_id, mode)
+
+    if room.get_ws(peer_id):
+        raise web.HTTPConflict(reason="peer_id already connected in this room")
+
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
     await ws.prepare(request)
 
-    room = manager.get_or_create(room_id, mode)
     await _setup_peer(ws, room, room_id, peer_id, mode)
     try:
         await _message_loop(ws, room, peer_id)
