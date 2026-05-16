@@ -38,11 +38,13 @@ ADR:
   runs in its own asyncio Task, so contextvars are isolated per connection. All downstream
   log calls carry the same context without threading it through function signatures.
 """
-import structlog
+
+from time import monotonic
+
 import aiohttp_cors
 import msgspec
+import structlog
 from aiohttp import WSCloseCode, WSMsgType, web
-from time import monotonic
 
 from webrtc_template.config import config
 from webrtc_template.modes import MODE_HANDLERS
@@ -68,13 +70,17 @@ async def _setup_peer(
     peer_id: str,
     existing_peers: list[str],
 ) -> None:
-    await ws.send_bytes(msgspec.json.encode({
-        "type": "room-info",
-        "room": room.room_id,
-        "mode": room.mode,
-        "peers": existing_peers,
-        "your_id": peer_id,
-    }))
+    await ws.send_bytes(
+        msgspec.json.encode(
+            {
+                "type": "room-info",
+                "room": room.room_id,
+                "mode": room.mode,
+                "peers": existing_peers,
+                "your_id": peer_id,
+            }
+        )
+    )
     await room.broadcast({"type": "peer-joined", "peer_id": peer_id}, exclude_id=peer_id)
 
 
@@ -181,11 +187,7 @@ def create_app() -> web.Application:
         allow_headers="*",
     )
     origins = config.cors_origins
-    cors_defaults = (
-        {"*": resource_options}
-        if origins == ["*"]
-        else {origin: resource_options for origin in origins}
-    )
+    cors_defaults = {"*": resource_options} if origins == ["*"] else {origin: resource_options for origin in origins}
     cors = aiohttp_cors.setup(app, defaults=cors_defaults)
     cors.add(app.router.add_get("/ice-servers", ice_servers_handler))
     app.router.add_get("/ws", ws_handler)

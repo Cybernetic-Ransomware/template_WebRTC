@@ -24,3 +24,36 @@ packages = ["backend/webrtc_template"]
 
 [tool.uv]
 package = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B", "SIM", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["F401", "F841"]
+
+[tool.ty.src]
+exclude = ["backend/tests/*"]
+
+[tool.codespell]
+skip = "./.git,./.github,./.venv,./uv.lock,./frontend/node_modules/*"
+quiet-level = 3
+
+[tool.bandit]
+skips = ["B104"]  # 0.0.0.0 default is intentional for containerized deployment
+exclude_dirs = ["backend/tests"]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "codespell>=2.4.2",
+    "pre-commit>=4.6.0",
+    "ruff>=0.15.13",
+    "ty>=0.0.37",
+]

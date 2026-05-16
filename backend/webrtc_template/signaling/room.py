@@ -39,7 +39,7 @@ class Room:
         payload = msgspec.json.encode(message)
         for pid, ws in list(self._peers.items()):
             if pid != exclude_id and not ws.closed:
-                await ws.send_str(payload)
+                await ws.send_bytes(payload)
 
     async def relay(self, to_peer_id: str, message: dict) -> None:
         ws = self._peers.get(to_peer_id)

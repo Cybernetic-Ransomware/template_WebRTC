@@ -18,8 +18,10 @@ ADR:
 - to_dict uses msgspec.to_builtins(self): serializes via msgspec instead of manual dict
   construction — single source of truth for field names.
 """
+
+from typing import Annotated, Literal
+
 import msgspec
-from typing import Annotated, Literal, TypeAlias
 
 NonEmptyStr = Annotated[str, msgspec.Meta(min_length=1)]
 
@@ -54,28 +56,28 @@ class LeaveMessage(msgspec.Struct, tag="leave", tag_field="type", frozen=True, f
     pass
 
 
-class OfferMessage(_RoutingMixin, msgspec.Struct, tag="offer", tag_field="type", frozen=True, forbid_unknown_fields=True):
+class OfferMessage(
+    _RoutingMixin, msgspec.Struct, tag="offer", tag_field="type", frozen=True, forbid_unknown_fields=True
+):
     sdp: NonEmptyStr
     to: str | None = None
 
 
-class AnswerMessage(_RoutingMixin, msgspec.Struct, tag="answer", tag_field="type", frozen=True, forbid_unknown_fields=True):
+class AnswerMessage(
+    _RoutingMixin, msgspec.Struct, tag="answer", tag_field="type", frozen=True, forbid_unknown_fields=True
+):
     sdp: NonEmptyStr
     to: str | None = None
 
 
-class IceCandidateMessage(_RoutingMixin, msgspec.Struct, tag="ice-candidate", tag_field="type", frozen=True, forbid_unknown_fields=True):
+class IceCandidateMessage(
+    _RoutingMixin, msgspec.Struct, tag="ice-candidate", tag_field="type", frozen=True, forbid_unknown_fields=True
+):
     candidate: IceCandidateInit
     to: str | None = None
 
 
-WSRMessage: TypeAlias = (
-    JoinMessage
-    | LeaveMessage
-    | OfferMessage
-    | AnswerMessage
-    | IceCandidateMessage
-)
+type WSRMessage = JoinMessage | LeaveMessage | OfferMessage | AnswerMessage | IceCandidateMessage
 
 WSR_DECODER: msgspec.json.Decoder[WSRMessage] = msgspec.json.Decoder(WSRMessage)
 WSR_ENCODER: msgspec.json.Encoder = msgspec.json.Encoder()
