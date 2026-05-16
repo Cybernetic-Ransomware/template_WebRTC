@@ -1,38 +1,45 @@
 FROM python:3.12-slim AS builder
 
-# libsrtp2-dev: headers needed by pylibsrtp (aiortc) if wheel falls back to source compile
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     libsrtp2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+RUN python -m pip install --upgrade pip --break-system-packages && \
+    pip install uv --break-system-packages
 
-WORKDIR /app
+COPY ./pyproject.toml ./uv.lock ./
+RUN uv sync --no-cache --no-dev --no-install-project
 
-# Install deps before copying source so Docker reuses this layer on code-only changes
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
-
-COPY backend/ backend/
-RUN uv sync --frozen --no-dev --no-editable
+COPY ./backend ./backend
+RUN uv sync --no-cache --no-dev
 
 
-FROM python:3.12-slim
+FROM python:3.12-slim AS runtime
 
-# libsrtp2-1: runtime shared lib; curl: used by the compose healthcheck
+LABEL authors="aleksander.marszalki"
+LABEL name="webrtc-template-signaling"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsrtp2-1 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --no-create-home appuser
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+ENV PATH="/app/.venv/bin:/usr/local/bin:$PATH"
 
 WORKDIR /app
 
-COPY --from=builder /app/.venv .venv
+COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
+RUN chmod -R +x /app/.venv/bin/
 
-ENV PATH="/app/.venv/bin:$PATH"
+COPY --chown=appuser:appgroup ./backend ./backend
+
 USER appuser
-EXPOSE 8080
+
+EXPOSE 8080/tcp
 
 CMD ["python", "-m", "webrtc_template"]
