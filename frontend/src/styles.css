@@ -1,0 +1,83 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  background: #111;
+  color: #eee;
+  min-height: 100vh;
+}
+
+.home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4rem 2rem;
+  gap: 2rem;
+}
+
+.home h1 {
+  font-size: 2.5rem;
+}
+
+.subtitle {
+  color: #888;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+.mode-card {
+  display: block;
+  width: 260px;
+  padding: 1.5rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s;
+}
+
+.mode-card:hover {
+  border-color: #6cf;
+}
+
+.mode-card h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.mode-card p {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+}
+
+video {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #222;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.status {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #888;
+}

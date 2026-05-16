@@ -29,7 +29,7 @@ repos:
         name: codespell
         entry: uv run python -m codespell_lib
         language: system
-        types_or: [python, markdown, yaml, rst]
+        types_or: [python, markdown, yaml, rst, javascript]
 
       - id: ty-check
         name: ty type check
@@ -45,3 +45,17 @@ repos:
         language: system
         types: [python]
         files: ^backend/
+
+      - id: prettier-frontend
+        name: prettier (frontend)
+        entry: npm --prefix frontend run format:check
+        language: system
+        files: ^frontend/src/
+        pass_filenames: false
+
+      - id: eslint-frontend
+        name: eslint (frontend)
+        entry: npm --prefix frontend run lint
+        language: system
+        files: ^frontend/src/
+        pass_filenames: false
