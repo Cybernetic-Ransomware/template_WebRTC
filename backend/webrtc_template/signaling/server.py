@@ -124,6 +124,8 @@ async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
     room.remove_peer(peer_id)
     try:
         await room.broadcast({"type": "peer-left", "peer_id": peer_id})
+    except Exception:
+        logger.exception("peer=%s broadcast peer-left failed", peer_id)
     finally:
         manager.cleanup_empty(room_id)
 
