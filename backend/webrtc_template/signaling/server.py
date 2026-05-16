@@ -20,6 +20,10 @@ ADR:
 - WSCloseCode choices: INVALID_TEXT (1007) for protocol violations, POLICY_VIOLATION (1008)
   for rate limit and duplicate peer_id, GOING_AWAY (1001) for server shutdown — each signals
   a distinct cause to the client reconnect logic.
+- Handler exceptions caught in _message_loop: bare propagation disconnects the peer silently —
+  teardown still runs (try/finally in ws_handler) but the root cause is lost. Caught with
+  logger.exception (includes traceback) + close(INTERNAL_ERROR / 1011). BLE001 broad-except
+  is intentional: mode handlers (especially SFU/aiortc) can throw unpredictably.
 - TOCTOU fix via Room._lock + try_add_peer: ws.prepare() yields to event loop, so the
   check-then-add must be atomic. ws.prepare() runs first (before lock) because it is I/O;
   duplicate is closed with POLICY_VIOLATION (1008) after the handshake instead of HTTP 409,
@@ -110,7 +114,12 @@ async def _message_loop(ws: web.WebSocketResponse, room: Room, peer_id: str) -> 
             logger.warning("peer=%s protocol violation: %s", peer_id, exc)
             await ws.close(code=WSCloseCode.INVALID_TEXT)
             break
-        await handler(room, peer_id, message)
+        try:
+            await handler(room, peer_id, message)
+        except Exception:
+            logger.exception("peer=%s handler error", peer_id)
+            await ws.close(code=WSCloseCode.INTERNAL_ERROR)
+            break
 
 
 async def _teardown_peer(room: Room, room_id: str, peer_id: str) -> None:
