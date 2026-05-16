@@ -13,6 +13,8 @@ class Config:
     turn_url: str = field(default_factory=lambda: os.getenv("TURN_URL", "turn:coturn:3478"))
     turn_username: str = field(default_factory=lambda: os.getenv("TURN_USERNAME", "webrtc"))
     turn_password: str = field(default_factory=lambda: os.getenv("TURN_PASSWORD", "webrtc_secret"))
+    # comma-separated list of allowed origins; "*" disables the whitelist (dev only)
+    cors_origins: list[str] = field(default_factory=lambda: os.getenv("CORS_ORIGINS", "*").split(","))
 
     @property
     def ice_servers(self) -> list[dict]:

@@ -108,13 +108,18 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
 def create_app() -> web.Application:
     app = web.Application()
-    cors = aiohttp_cors.setup(app, defaults={
-        "*": aiohttp_cors.ResourceOptions(
-            allow_credentials=True,
-            expose_headers="*",
-            allow_headers="*",
-        )
-    })
+    resource_options = aiohttp_cors.ResourceOptions(
+        allow_credentials=True,
+        expose_headers="*",
+        allow_headers="*",
+    )
+    origins = config.cors_origins
+    cors_defaults = (
+        {"*": resource_options}
+        if origins == ["*"]
+        else {origin: resource_options for origin in origins}
+    )
+    cors = aiohttp_cors.setup(app, defaults=cors_defaults)
     cors.add(app.router.add_get("/ice-servers", ice_servers_handler))
     app.router.add_get("/ws", ws_handler)
     return app
