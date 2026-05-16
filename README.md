@@ -75,7 +75,7 @@ Copy `docker/.env.template` to `docker/.env` and fill in the values:
 
 ```bash
 cp docker/.env.template docker/.env        # fill in TURN credentials
-docker compose up --build
+just up
 ```
 
 Open `https://localhost` in your browser. Accept the self-signed certificate (Caddy `tls internal`).
@@ -90,8 +90,8 @@ Open `https://localhost` in your browser. Accept the self-signed certificate (Ca
 
 ```bash
 uv sync
-cp .env.example .env
-uv run python -m webrtc_template
+cp docker/.env.template docker/.env
+just run
 ```
 
 The signaling server starts on `http://localhost:8080`.
@@ -101,8 +101,8 @@ ICE servers endpoint: `GET http://localhost:8080/ice-servers`
 ## Linting
 
 ```bash
-uv run ruff format .
-uv run ruff check .
+just lint        # ruff format + check + ty + codespell
+just security    # bandit
 ```
 
 ## Learning Guide
@@ -118,9 +118,9 @@ The codebase is structured so each layer can be read independently:
 | `modes/mesh.py` | directed signaling, N×N connection management |
 | `modes/sfu.py` | aiortc as a WebRTC peer, track forwarding, `MediaRelay` |
 | `frontend/lib/peer.js` | `RTCPeerConnection` setup, trickle ICE |
-| `frontend/modes/p2p.js` | perfect negotiation pattern (polite/impolite peer) |
-| `frontend/modes/mesh.js` | managing a `Map<peerId, RTCPeerConnection>` |
-| `frontend/modes/sfu.js` | single connection, multiple remote tracks |
+| `frontend/modes/P2P.svelte` | perfect negotiation pattern (polite/impolite peer) |
+| `frontend/modes/Mesh.svelte` | managing a `Map<peerId, RTCPeerConnection>` |
+| `frontend/modes/SFU.svelte` | single connection, multiple remote tracks |
 
 Architecture decisions are documented in `docs/`.
 

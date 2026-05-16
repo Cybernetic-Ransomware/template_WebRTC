@@ -41,7 +41,7 @@ backend/webrtc_template/
         room.py            # Room: peer registry, broadcast, relay
         manager.py         # RoomManager: room registry + cleanup
     modes/
-        __init__.py        # MODE_HANDLERS dispatch table
+        __init__.py        # MODE_HANDLERS dispatch table + MODE_MAX_PEERS capacity limits
         p2p.py             # P2P handler (max 2 peers, passthrough)
         mesh.py            # Mesh handler (directed passthrough N×N)
         sfu.py             # SFU handler (aiortc peer per participant)
@@ -54,10 +54,13 @@ frontend/src/
     modes/{p2p,mesh,sfu}.js
 
 docker/
-    docker-compose.yml
+    Dockerfile             # multi-stage: builder (uv + libsrtp2-dev) / runtime (non-root, libsrtp2-1)
+    docker-compose.yml     # name: webrtc-template; services: signaling + coturn + caddy
     .env.template          # copy to .env and fill in credentials
     caddy/Caddyfile        # tls internal, reverse proxy
     coturn/turnserver.conf
+
+justfile                   # task runner (just up / down / ps / logs / lint / run)
 
 docs/                      # Architecture Decision Records
 ```
@@ -74,7 +77,7 @@ docs/                      # Architecture Decision Records
 
 ### server.py
 - `ws_handler` is orchestration only — lifecycle split into `_setup_peer`, `_message_loop`, `_teardown_peer`
-- `ALLOWED_MODES = frozenset(MODE_HANDLERS)` — single source of truth, derived from the dispatch table
+- Mode validation: `mode not in MODE_HANDLERS` — direct dict lookup, O(1), no redundant frozenset alias
 - `ValidationError` from msgspec → `ws.close(code=WSCloseCode.INVALID_TEXT)` (RFC 6455 code 1007) + break
 - `try/finally` in `ws_handler` guarantees peer cleanup regardless of how the loop exits
 - All server→client messages are sent as **BINARY frames** (`send_bytes` + `msgspec.json.encode`) — frontend must decode `ArrayBuffer` to JSON, not expect plain strings
@@ -96,11 +99,16 @@ The user runs all git commands — never execute `git add`, `git commit`, `git p
 
 ## Linting
 
-Configured in `pyproject.toml`, run via ruff:
+```bash
+just lint        # ruff format + check + ty + codespell
+just security    # bandit
+```
+
+Or directly:
 
 ```bash
-uv run ruff format .     # format
-uv run ruff check .      # lint
+uv run ruff format .
+uv run ruff check .
 ```
 
 ## Architecture Decision Records
@@ -118,7 +126,7 @@ New decisions should be documented as a markdown file in `docs/`.
 This project uses **Learn by Doing**: at key design-decision points, the user implements 2–10 line code pieces before seeing the solution. These are marked `TODO(human)` in the code. Do not remove or implement `TODO(human)` markers without user contribution.
 
 Remaining contribution points:
-1. `modes/p2p.py` — logic for rejecting a 3rd peer (kick? error? queue?)
-2. `frontend/modes/p2p.js` — `track` event handler (insert remote video into UI)
-3. `frontend/modes/mesh.js` — `cleanupPeer(peerId)` teardown order
+1. `signaling/room.py` — `max_peers` guard in `try_add_peer` (enforce capacity atomically under lock)
+2. `frontend/modes/P2P.svelte` — `track` event handler (insert remote video into UI)
+3. `frontend/modes/Mesh.svelte` — `cleanupPeer(peerId)` teardown order
 4. `backend/modes/sfu.py` — `attach_subscriber_tracks` renegotiation timing
